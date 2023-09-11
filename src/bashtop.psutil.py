@@ -72,8 +72,8 @@ def get_sensors_check():
 	try:
 		temps = psutil.sensors_temperatures()
 	except:
-		pass
-		print("false"); return
+		print("false")
+		return
 	if not temps: print("false"); return
 	try:
 		for _, entries in temps.items():
@@ -91,20 +91,22 @@ def get_cpu_name():
 	command: str = ""
 	all_info: str = ""
 	rem_line: str = ""
-	if system == "Linux":
+	if system == "BSD":
+		command ="sysctl hw.model"
+		rem_line = "hw.model"
+
+	elif system == "Linux":
 		command = "cat /proc/cpuinfo"
 		rem_line = "model name"
 	elif system == "MacOS":
 		command ="sysctl -n machdep.cpu.brand_string"
-	elif system == "BSD":
-		command ="sysctl hw.model"
-		rem_line = "hw.model"
-
-	all_info = subprocess.check_output("LANG=C " + command, shell=True, universal_newlines=True)
+	all_info = subprocess.check_output(
+		f"LANG=C {command}", shell=True, universal_newlines=True
+	)
 	if rem_line:
 		for line in all_info.split("\n"):
 			if rem_line in line:
-				name = re.sub( ".*" + rem_line + ".*:", "", line,1).lstrip()
+				name = re.sub(f".*{rem_line}.*:", "", line, 1).lstrip()
 	else:
 		name = all_info
 	if "Xeon" in name:
@@ -182,7 +184,7 @@ def get_detailed_names_cmd(pid: int):
 		print(p.name())
 		print(pa.name())
 		print(p.username())
-		cmd = ' '.join(p.cmdline()) or '[' + p.name() + ']'
+		cmd = ' '.join(p.cmdline()) or f'[{p.name()}]'
 		print(cleaned(cmd))
 
 def get_detailed_mem_time(pid: int):
@@ -235,11 +237,15 @@ def get_proc(sorting='cpu lazy', tree=False, prog_len=0, arg_len=0, search='', r
 		if p.info['num_threads'] == err:
 			p.info['num_threads'] = 0
 		if search:
-			found = False
-			for value in [ p.info['name'], ' '.join(p.info['cmdline']), str(p.info['pid']), p.info['username'] ]:
-				if search in value:
-					found = True
-					break
+			found = any(
+				search in value
+				for value in [
+					p.info['name'],
+					' '.join(p.info['cmdline']),
+					str(p.info['pid']),
+					p.info['username'],
+				]
+			)
 			if not found:
 				continue
 
@@ -272,12 +278,10 @@ def proc_tree(width: int, sorting: str = 'cpu lazy', reverse: bool = True, max_l
 			name: str = psutil.Process(parent).name()
 			if name == "idle": return
 		except psutil.Error:
-			pass
 			name: str = ''
 		try:
 			getinfo: Dict = infolist[parent]
 		except:
-			pass
 			getinfo: bool = False
 		if search and not found:
 			for value in [ name, str(parent), getinfo['username'] if getinfo else '' ]:
@@ -305,11 +309,11 @@ def proc_tree(width: int, sorting: str = 'cpu lazy', reverse: bool = True, max_l
 			return
 		children = tree[parent][:-1]
 		for child in children:
-			create_tree(child, tree, indent + " │ ", indent + " ├─ ", found=found)
+			create_tree(child, tree, f"{indent} │ ", f"{indent} ├─ ", found=found)
 			if max_lines and tree_line_count >= max_lines:
 				break
 		child = tree[parent][-1]
-		create_tree(child, tree, indent + "  ", indent + " └─ ")
+		create_tree(child, tree, f"{indent}  ", f"{indent} └─ ")
 
 	infolist: Dict = {}
 	tree: List = defaultdict(list)
@@ -336,15 +340,16 @@ def get_disks(exclude: str = None, filtering: str = None):
 	dev_name: str
 	disk_name: str
 	disk_list: List[str] = []
-	excludes: List[str] = []
-	if exclude: excludes = exclude.split(' ')
+	excludes = exclude.split(' ') if exclude else []
 	if system == "BSD": excludes += ["devfs", "tmpfs", "procfs", "linprocfs", "gvfs", "fusefs"]
 	if filtering: filtering: Tuple[str] = tuple(filtering.split(' '))
-	io_counters = psutil.disk_io_counters(perdisk=True if system == "Linux" else False, nowrap=True)
+	io_counters = psutil.disk_io_counters(perdisk=system == "Linux", nowrap=True)
 	print("Ignored line")
 	for disk in psutil.disk_partitions():
 		disk_io = None
-		disk_name = disk.mountpoint.rsplit('/', 1)[-1] if not disk.mountpoint == "/" else "root"
+		disk_name = (
+			disk.mountpoint.rsplit('/', 1)[-1] if disk.mountpoint != "/" else "root"
+		)
 		while disk_name in disk_list: disk_name += "_"
 		disk_list += [disk_name]
 		if excludes and disk.fstype in excludes or filtering and not disk_name.endswith(filtering):
@@ -375,7 +380,6 @@ def get_disks(exclude: str = None, filtering: str = None):
 			disk_read -= disk_hist[disk.device][0]
 			disk_write -= disk_hist[disk.device][1]
 		except:
-			pass
 			disk_read = 0
 			disk_write = 0
 
@@ -389,7 +393,6 @@ while command != 'quit':
 	try:
 		command = input()
 	except:
-		pass
 		quit()
 
 	if not command or command == 'test':
@@ -398,7 +401,6 @@ while command != 'quit':
 		try:
 			exec(command)
 		except Exception as e:
-			pass
 			print()
 			print('/ERROR')
 			print(f'PSUTIL ERROR! Command: {command}\n{e}', file=sys.stderr)
